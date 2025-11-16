@@ -1,0 +1,354 @@
+<!--
+SafeLink — Digital Safety Learning Hub (Static HTML + CSS + Vanilla JavaScript)
+Filename: index.html
+
+How to use:
+1. Copy this file into a new file named `index.html`.
+2. Open it in any modern browser (Chrome, Firefox, Edge, Safari).
+3. The app is fully client-side and stores progress in localStorage under key `safelink_progress_v1`.
+
+Features included in this single-file prototype:
+- Gamified lessons with visual storytelling slides
+- Interactive quiz component with immediate feedback, scoring, and progress
+- Adaptive lesson selection (chooses easier/harder lessons based on past performance)
+- Progress persistence (localStorage)
+- Points, levels, and badges
+- Lightweight CSS animations and mobile-friendly layout
+
+Notes & next steps:
+- This is a front-end prototype. For multi-user persistence, add a backend (API + DB).
+- You can extend lessons, import media assets, or add authentication.
+-->
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SafeLink — Digital Safety Learning Hub</title>
+  <style>
+    :root{
+      --bg:#f6fbff; --card:#ffffff; --accent:#0ea5a6; --muted:#6b7280; --accent2:#7c3aed;
+      --radius:12px; --glass: rgba(255,255,255,0.7);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; background:linear-gradient(180deg,#f1f7fb 0%, #eef7ff 100%); color:#0f172a}
+    .container{max-width:1100px;margin:28px auto;padding:18px}
+    header{display:flex;align-items:center;justify-content:space-between;padding:14px;border-radius:14px;background:linear-gradient(90deg,#0ea5a6,#7c3aed);color:white}
+    .brand{display:flex;gap:12px;align-items:center}
+    .logo{width:56px;height:56px;border-radius:10px;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;font-weight:700}
+    .title{font-size:1.1rem;font-weight:700}
+    .subtitle{font-size:0.85rem;opacity:0.9}
+    main{display:grid;grid-template-columns:1fr 320px;gap:18px;margin-top:18px}
+    .card{background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:0 6px 18px rgba(12,24,50,0.06)}
+    .lessons-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+    .lesson-card{padding:14px;border-radius:10px;background:linear-gradient(180deg,#ffffff,#fbfdff);cursor:pointer;transition:transform .18s ease, box-shadow .18s; border:1px solid rgba(15,23,42,0.04)}
+    .lesson-card:hover{transform:translateY(-6px);box-shadow:0 12px 30px rgba(12,24,50,0.08)}
+    .muted{color:var(--muted)}
+
+    .controls{display:flex;gap:8px;margin-top:12px}
+    button{border:0;padding:8px 12px;border-radius:10px;cursor:pointer}
+    .btn-primary{background:linear-gradient(90deg,var(--accent),var(--accent2));color:white}
+    .btn-ghost{background:transparent;border:1px solid rgba(12,24,50,0.06)}
+
+    /* Story player */
+    .story{display:flex;flex-direction:column;gap:12px}
+    .slide{padding:18px;border-radius:10px;background:linear-gradient(180deg,#fff,#fbfeff);min-height:140px;display:flex;flex-direction:column;justify-content:center;transition:transform .35s ease,opacity .35s}
+    .slide-title{font-weight:700;font-size:1.05rem}
+
+    /* Quiz */
+    .options{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+    .opt{padding:12px;border-radius:8px;border:1px solid rgba(15,23,42,0.06);cursor:pointer;background:linear-gradient(180deg,#fff,#fcfeff);transition:transform .12s ease}
+    .opt:hover{transform:translateY(-4px)}
+    .feedback{margin-top:12px;font-weight:700}
+
+    /* Sidebar */
+    .sidebar .badge{background:linear-gradient(90deg,#f8fafc,#fff);padding:10px;border-radius:8px;margin-bottom:10px}
+
+    /* Modal */
+    .modal-backdrop{position:fixed;inset:0;background:rgba(3,7,18,0.55);display:flex;align-items:center;justify-content:center}
+    .modal{width:92%;max-width:560px}
+
+    footer{margin-top:20px;text-align:center;color:var(--muted);font-size:0.9rem}
+
+    /* Responsive */
+    @media(max-width:880px){main{grid-template-columns:1fr} .options{grid-template-columns:1fr} .sidebar{order:2}}
+
+    /* small animations */
+    .pop {animation:pop .42s ease}
+    @keyframes pop{0%{transform:scale(.98);opacity:.6}50%{transform:scale(1.04)}100%{transform:scale(1)} }
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="logo">SL</div>
+        <div>
+          <div class="title">SafeLink</div>
+          <div class="subtitle">Digital Safety Learning Hub</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center">
+        <div id="levelView" style="text-align:right">
+          <div style="font-weight:700">Level <span id="levelNumber">1</span></div>
+          <div class="muted" style="font-size:0.85rem">Points: <span id="points">0</span></div>
+        </div>
+        <button class="btn-ghost" id="profileBtn">Profile</button>
+      </div>
+    </header>
+
+    <main>
+      <section>
+        <div class="card">
+          <h2 style="margin:0 0 6px 0">SafeLink — Start Learning</h2>
+          <div class="muted">Interactive, story-driven lessons that adapt to your performance.</div>
+
+          <div style="margin-top:14px">
+            <div class="muted">Lessons</div>
+            <div class="lessons-grid" id="lessonsList" style="margin-top:10px"></div>
+
+            <div class="controls">
+              <button class="btn-primary" id="startAdaptive">Start Adaptive Lesson</button>
+              <button class="btn-ghost" id="resetProgress">Reset Progress</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="stage" style="margin-top:14px"></div>
+      </section>
+
+      <aside class="sidebar">
+        <div class="card">
+          <div class="badge">
+            <div style="font-weight:700">Progress</div>
+            <div class="muted" id="progressText">No activity yet</div>
+          </div>
+          <div class="badge">
+            <div style="font-weight:700">Badges</div>
+            <div class="muted" id="badges">—</div>
+          </div>
+
+          <div style="margin-top:10px" class="badge">
+            <div style="font-weight:700">Quick Tips</div>
+            <ul style="margin:6px 0 0 16px;color:#374151">
+              <li>Enable multi-factor authentication.</li>
+              <li>Use a password manager and unique passwords.</li>
+              <li>Verify requests via alternate channels.</li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer>SafeLink — Prototype. For production, add backend & secure hosting.</footer>
+  </div>
+
+  <!-- Profile Modal -->
+  <div id="profileModal" style="display:none" class="modal-backdrop">
+    <div class="card modal">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:700;font-size:1.05rem">Profile</div>
+          <div class="muted">Learning overview</div>
+        </div>
+        <button id="closeProfile">Close</button>
+      </div>
+      <div style="margin-top:12px">
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div style="flex:1">
+            <div class="muted">Points</div>
+            <div style="font-weight:700" id="modalPoints">0</div>
+          </div>
+          <div style="flex:1">
+            <div class="muted">Level</div>
+            <div style="font-weight:700" id="modalLevel">1</div>
+          </div>
+          <div style="flex:1">
+            <div class="muted">Completed</div>
+            <div style="font-weight:700" id="modalCompleted">0</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="muted">Badges</div>
+          <div id="modalBadges" style="margin-top:4px">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ---------- Lesson data ----------
+    const LESSONS = [
+      {
+        id: 'intro', title: 'Welcome: What is Neural Hijacking?', difficulty:1,
+        slides: [
+          {title:'The Threat', text:'Neural hijacking: targeted manipulation of online identity and sessions.'},
+          {title:'Impact', text:'Loss of accounts, financial theft, and identity misuse.'},
+          {title:'Your Mission', text:'Learn to defend, detect, and recover — one lesson at a time.'}
+        ],
+        quiz:[
+          {id:'q1', q:"What's the most secure way to protect online accounts?", options:['Single strong password','Multi-factor authentication (MFA)','Saving passwords in browser without master password','Using public Wi-Fi only'], answer:1, difficulty:1},
+          {id:'q2', q:'Which is a red flag for phishing?', options:['Personalized greeting','HTTPS + lock icon','Urgent demand for credentials','Known sender address'], answer:2, difficulty:1}
+        ]
+      },
+      {
+        id:'passwords', title:'Password Security & Passphrases', difficulty:2,
+        slides:[
+          {title:'Passphrases vs Passwords', text:'Long passphrases are easier to remember and harder to brute-force.'},
+          {title:'Password Managers', text:'A password manager stores unique complex passwords and fills them for you.'},
+          {title:'Avoid Reuse', text:'Do not reuse passwords across critical accounts.'}
+        ],
+        quiz:[
+          {id:'q3', q:'Which approach gives best security for many accounts?', options:['One strong password everywhere','Unique strong passwords + manager','Write them in a notebook','Use sequential numbers'], answer:1, difficulty:2},
+          {id:'q4', q:'A good passphrase example is:', options:['P@55w0rd','correct horse battery staple','12345678','firstlast1999'], answer:1, difficulty:2}
+        ]
+      },
+      {
+        id:'phishing', title:'Phishing Awareness', difficulty:3,
+        slides:[
+          {title:'Social Engineering', text:'Phishers manipulate emotions — urgency, fear, curiosity.'},
+          {title:'Email Signals', text:'Look for mismatched domains, spoofing, incorrect grammar, suspicious links.'},
+          {title:'Verify before you click', text:'Use alternate channels to verify requests for money or credentials.'}
+        ],
+        quiz:[
+          {id:'q5', q:"A link that shows 'paypal.com' but leads to a different domain is:", options:['Safe','Suspicious — possible spoofing','Faster','Recommended'], answer:1, difficulty:3},
+          {id:'q6', q:'If an internal executive asks for urgent fund transfer via chat, you should:', options:['Transfer immediately','Verify via another channel','Share credentials','Reply with attachments'], answer:1, difficulty:3}
+        ]
+      }
+    ];
+
+    // ---------- Persistence ----------
+    const STORAGE_KEY = 'safelink_progress_v1';
+    function loadProgress(){
+      try{ const s = localStorage.getItem(STORAGE_KEY); return s?JSON.parse(s):{points:0,scores:[],completed:{},badges:[]} }catch(e){return {points:0,scores:[],completed:{},badges:[]}} }
+    function saveProgress(p){ localStorage.setItem(STORAGE_KEY, JSON.stringify(p)); }
+
+    let progress = loadProgress();
+
+    // ---------- UI helpers ----------
+    const lessonsList = document.getElementById('lessonsList');
+    const stage = document.getElementById('stage');
+    const pointsEl = document.getElementById('points');
+    const levelNumber = document.getElementById('levelNumber');
+    const progressText = document.getElementById('progressText');
+    const badgesEl = document.getElementById('badges');
+
+    function renderLessons(){
+      lessonsList.innerHTML = '';
+      LESSONS.forEach(l => {
+        const div = document.createElement('div'); div.className='lesson-card';
+        div.innerHTML = `<div style="font-weight:700">${l.title}</div><div class="muted" style="font-size:0.85rem">Difficulty: ${l.difficulty}</div><div style="margin-top:6px;color:#374151">${l.slides[0].text.slice(0,80)}...</div>`;
+        div.onclick = ()=> openLesson(l);
+        lessonsList.appendChild(div);
+      })
+    }
+
+    function updateSidebar(){
+      pointsEl.textContent = progress.points || 0;
+      const level = Math.floor((progress.points||0)/100)+1;
+      levelNumber.textContent = level;
+      progressText.textContent = `Completed: ${Object.keys(progress.completed).length} • Avg score: ${avgScoreText()}`;
+      badgesEl.textContent = (progress.badges && progress.badges.length)? progress.badges.join(', '): '—';
+    }
+
+    function avgScoreText(){ if(!progress.scores || progress.scores.length===0) return '—'; const avg = progress.scores.reduce((a,b)=>a+b,0)/progress.scores.length; return Math.round(avg*100)+'%'; }
+
+    // ---------- Lesson flow ----------
+    let currentLesson = null;
+
+    function openLesson(lesson){
+      currentLesson = lesson;
+      stage.innerHTML = '';
+      const card = document.createElement('div'); card.className='card';
+      const hdr = document.createElement('div'); hdr.style.display='flex'; hdr.style.justifyContent='space-between'; hdr.style.alignItems='center'; hdr.innerHTML = `<div><div style='font-weight:700'>${lesson.title}</div><div class='muted' style='font-size:0.9rem'>Difficulty ${lesson.difficulty}</div></div>`;
+      const back = document.createElement('button'); back.className='btn-ghost'; back.textContent='Back'; back.onclick = ()=>{ stage.innerHTML=''; currentLesson=null; };
+      hdr.appendChild(back); card.appendChild(hdr);
+
+      // story container
+      const storyContainer = document.createElement('div'); storyContainer.className='story'; storyContainer.style.marginTop='12px';
+      let idx = 0;
+      function renderSlide(){ storyContainer.innerHTML=''; if(idx>=lesson.slides.length){ // finished story -> open quiz
+          renderQuiz(); return; }
+        const s = lesson.slides[idx];
+        const slide = document.createElement('div'); slide.className='slide pop';
+        slide.innerHTML = `<div class='slide-title'>${s.title}</div><div class='muted' style='margin-top:8px'>${s.text}</div>`;
+        const nav = document.createElement('div'); nav.style.display='flex'; nav.style.justifyContent='flex-end'; nav.style.marginTop='8px';
+        const next = document.createElement('button'); next.className='btn-primary'; next.textContent = idx === lesson.slides.length-1 ? 'Take Quiz' : 'Next'; next.onclick = ()=>{ idx++; renderSlide(); };
+        nav.appendChild(next); slide.appendChild(nav); storyContainer.appendChild(slide);
+      }
+
+      function renderQuiz(){ storyContainer.innerHTML=''; const qCard = document.createElement('div'); qCard.className='card';
+        qCard.innerHTML = `<div style='font-weight:700'>Quiz — ${lesson.title}</div><div class='muted' style='margin-top:6px'>Difficulty ${lesson.difficulty}</div>`;
+        const qArea = document.createElement('div'); qArea.style.marginTop='8px';
+        let qIndex = 0; let score = 0; let history = [];
+        function renderQuestion(){ qArea.innerHTML=''; const q = lesson.quiz[qIndex]; if(!q){ // finished
+            // compute
+            const ratio = score / lesson.quiz.length;
+            const pointsGain = Math.round(ratio * 50 * lesson.difficulty);
+            progress.points = (progress.points||0) + pointsGain;
+            progress.scores.push(ratio);
+            progress.completed[lesson.id]=true;
+            if(ratio === 1) progress.badges.push('Mastered:'+lesson.id);
+            saveProgress(progress); updateSidebar();
+            qArea.innerHTML = `<div style='font-weight:700'>Quiz finished</div><div class='muted' style='margin-top:6px'>Score: ${score} / ${lesson.quiz.length} • +${pointsGain} pts</div>`;
+            const doneBtn = document.createElement('button'); doneBtn.className='btn-primary'; doneBtn.style.marginTop='10px'; doneBtn.textContent='Return Home'; doneBtn.onclick=()=>{ stage.innerHTML=''; currentLesson=null; };
+            qArea.appendChild(doneBtn);
+            return;
+          }
+          const qTitle = document.createElement('div'); qTitle.textContent = q.q; qTitle.style.fontWeight='600'; qArea.appendChild(qTitle);
+          const opts = document.createElement('div'); opts.className='options'; opts.style.marginTop='10px'; q.options.forEach((opt,i)=>{
+            const b = document.createElement('div'); b.className='opt'; b.textContent=opt; b.onclick=()=>{
+              // disable clicks
+              Array.from(opts.children).forEach(c=>c.style.pointerEvents='none');
+              const correct = (i === q.answer);
+              if(correct){ score++; b.style.border='2px solid #10b981'; b.style.fontWeight='700'; } else { b.style.border='2px solid #ef4444'; b.style.opacity='0.86'; }
+              history.push({id:q.id,correct});
+              const feedback = document.createElement('div'); feedback.className='feedback'; feedback.textContent = correct? 'Correct!' : 'Incorrect.'; qArea.appendChild(feedback);
+              setTimeout(()=>{ qIndex++; renderQuestion(); }, 900);
+            };
+            opts.appendChild(b);
+          });
+          qArea.appendChild(opts);
+        }
+        qCard.appendChild(qArea);
+        storyContainer.appendChild(qCard);
+        renderQuestion();
+      }
+
+      card.appendChild(storyContainer);
+      stage.appendChild(card);
+      renderSlide();
+    }
+
+    // ---------- Adaptive engine ----------
+    function chooseNextLesson(){
+      const avg = (progress.scores && progress.scores.length)? progress.scores.reduce((a,b)=>a+b,0)/progress.scores.length : 0;
+      if(avg < 0.6) return LESSONS[0];
+      if(avg < 0.85) return LESSONS[1];
+      return LESSONS[2];
+    }
+
+    document.getElementById('startAdaptive').onclick = ()=>{
+      const next = chooseNextLesson(); openLesson(next);
+    }
+
+    // ---------- Profile modal ----------
+    const profileBtn = document.getElementById('profileBtn');
+    const profileModal = document.getElementById('profileModal');
+    profileBtn.onclick = ()=>{ document.getElementById('modalPoints').textContent = progress.points||0; document.getElementById('modalLevel').textContent = Math.floor((progress.points||0)/100)+1; document.getElementById('modalCompleted').textContent = Object.keys(progress.completed).length; document.getElementById('modalBadges').textContent = (progress.badges && progress.badges.length)? progress.badges.join(', '): '—'; profileModal.style.display='flex'; }
+    document.getElementById('closeProfile').onclick = ()=> profileModal.style.display='none';
+
+    // reset progress
+    document.getElementById('resetProgress').onclick = ()=>{
+      if(confirm('Reset progress? This will clear local progress only.')){ progress = {points:0,scores:[],completed:{},badges:[]}; saveProgress(progress); updateSidebar(); alert('Progress reset.'); }
+    }
+
+    // initial render
+    renderLessons(); updateSidebar();
+
+  </script>
+</body>
+</html>
